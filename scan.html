@@ -60,6 +60,11 @@ input{background:transparent;border:1px solid var(--line);color:var(--bone);font
 var BASE = 'https://script.google.com/macros/s/AKfycbyN8MaPdlkPP1jNrD0tliTKnCbB1lLDkiG3-c7Gw05ajPdwejzZ3cuAxt8pOj4Q4izw/exec';
 
 var KEY = sessionStorage.getItem('ht4key') || '';
+(function(){
+  var qs = new URLSearchParams(location.search);
+  var qk = qs.get('key');
+  if(qk){ KEY = qk; sessionStorage.setItem('ht4key', qk); }
+})();
 var sibuk=false, stream=null, scanning=false;
 
 function e2(s){return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}
