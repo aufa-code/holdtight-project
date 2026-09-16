@@ -35,12 +35,15 @@ input{background:transparent;border:1px solid var(--line);color:var(--bone);font
   </div>
 
   <div id="scanArea" style="display:none">
-    <div class="card" style="text-align:center;padding:14px">
+    <div class="card" style="text-align:center;padding:14px;position:relative">
       <video id="video" playsinline autoplay muted style="width:100%;border-radius:4px;background:#000;display:none"></video>
-      <canvas id="canvas" style="display:none"></canvas>
+      <div id="scanFrame" style="position:absolute;left:14px;right:14px;top:14px;bottom:96px;display:none;align-items:center;justify-content:center;pointer-events:none">
+        <div style="width:62%;aspect-ratio:1/1;border:3px solid var(--green);border-radius:14px;box-shadow:0 0 0 999px rgba(0,0,0,.45)"></div>
+      </div>
       <button id="btnCam" class="btn green">Buka Kamera — Live Scan</button>
       <button id="btnStop" class="btn ghost" style="margin-top:8px;display:none">Tutup Kamera</button>
-      <p class="lbl" style="margin-top:12px">arahkan kamera ke qr, kedeteksi otomatis — 1 qr untuk 1 orang</p>
+      <button id="btnTorch" class="btn ghost" style="margin-top:8px;display:none">Senter 🔦</button>
+      <p class="lbl" style="margin-top:12px" id="camHint">arahkan kamera ke qr, kedeteksi otomatis — 1 qr untuk 1 orang</p>
     </div>
     <div class="card">
       <label class="lbl">atau ketik kode manual</label>
@@ -54,7 +57,7 @@ input{background:transparent;border:1px solid var(--line);color:var(--bone);font
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qr-scanner@1.4.2/qr-scanner.umd.min.js"></script>
 <script>
 /* GANTI dengan Web App URL Apps Script lo (sama persis dgn TICKET_API di index.html) */
 var BASE = 'https://script.google.com/macros/s/AKfycbyN8MaPdlkPP1jNrD0tliTKnCbB1lLDkiG3-c7Gw05ajPdwejzZ3cuAxt8pOj4Q4izw/exec';
@@ -65,7 +68,7 @@ var KEY = sessionStorage.getItem('ht4key') || '';
   var qk = qs.get('key');
   if(qk){ KEY = qk; sessionStorage.setItem('ht4key', qk); }
 })();
-var sibuk=false, stream=null, scanning=false;
+var sibuk=false;
 
 function e2(s){return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}
 function tampil(warna,pesan){document.getElementById("hasil").innerHTML="<div class=card style='border-color:"+warna+"'><h1 style='font-size:28px;color:"+warna+";line-height:1.4'>"+pesan+"</h1></div>"}
@@ -98,46 +101,72 @@ function cek(code){
   }).catch(function(){tampil("var(--red)","KONEKSI GAGAL — coba lagi");sibuk=false});
 }
 
-var video, canvas, ctx;
+// catatan: versi qr-scanner ini udah auto-import worker-nya sendiri, gak perlu di-set manual lagi
+var video, qrScanner=null, lastResult='', torchOn=false;
+
 function mulaiKamera(){
-  video=document.getElementById("video"); canvas=document.getElementById("canvas");
-  ctx=canvas.getContext("2d",{willReadFrequently:true});
-  if(typeof jsQR==="undefined"){tampil("var(--red)","LIBRARY QR BELUM TERMUAT — cek internet, lalu refresh");return}
-  navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"},width:{ideal:1280},height:{ideal:720}}})
-  .then(function(s){
-    stream=s; video.srcObject=s; video.style.display="block"; video.play();
-    document.getElementById("btnCam").style.display="none";
+  video=document.getElementById("video");
+  if(typeof QrScanner==="undefined"){tampil("var(--red)","LIBRARY QR BELUM TERMUAT — cek internet, lalu refresh");return}
+
+  var btn=document.getElementById("btnCam");
+  btn.disabled=true; btn.textContent="MEMINTA IZIN KAMERA…";
+
+  qrScanner = new QrScanner(video, function(result){
+    var text = (result && result.data) || result;
+    if(!text || sibuk || text===lastResult) return;
+    lastResult = text;
+    cek(text);
+    setTimeout(function(){ lastResult=''; }, 2600); // biar QR yg sama gak double-trigger pas masih ke-hold
+  }, {
+    // hanya scan area kotak tengah (sama kayak frame ijo di layar) — jauh lebih cepat & akurat
+    // daripada scan seluruh frame kamera penuh
+    highlightScanRegion: false,
+    highlightCodeOutline: false,
+    maxScansPerSecond: 10,
+    preferredCamera: 'environment',
+    returnDetailedScanResult: true
+  });
+
+  qrScanner.start().then(function(){
+    video.style.display="block";
+    document.getElementById("scanFrame").style.display="flex";
+    btn.style.display="none"; btn.disabled=false; btn.textContent="Buka Kamera — Live Scan";
     document.getElementById("btnStop").style.display="block";
-    scanning=true; requestAnimationFrame(tick);
-  }).catch(function(err){tampil("var(--red)","GAGAL BUKA KAMERA ✕<br><small>"+e2(err&&err.message||err)+"</small>")});
+    document.getElementById("camHint").textContent="live — arahkan ke qr, otomatis kedetek";
+
+    qrScanner.hasFlash().then(function(has){
+      if(has) document.getElementById("btnTorch").style.display="block";
+    }).catch(function(){});
+  }).catch(function(err){
+    btn.disabled=false; btn.textContent="Buka Kamera — Live Scan";
+    tampil("var(--red)","GAGAL BUKA KAMERA ✕<br><small>"+e2(err&&err.message||err)+"</small>");
+  });
 }
+
 function stopKamera(){
-  scanning=false;
-  if(stream){stream.getTracks().forEach(function(t){t.stop()});stream=null}
+  if(qrScanner){ qrScanner.stop(); qrScanner.destroy(); qrScanner=null; }
+  torchOn=false;
   if(video) video.style.display="none";
-  var bc=document.getElementById("btnCam"), bs=document.getElementById("btnStop");
+  var bc=document.getElementById("btnCam"), bs=document.getElementById("btnStop"), bt=document.getElementById("btnTorch");
   if(bc) bc.style.display="block";
   if(bs) bs.style.display="none";
+  if(bt){ bt.style.display="none"; bt.textContent="Senter 🔦"; }
+  var sf=document.getElementById("scanFrame"); if(sf) sf.style.display="none";
+  var ch=document.getElementById("camHint"); if(ch) ch.textContent="arahkan kamera ke qr, kedeteksi otomatis — 1 qr untuk 1 orang";
 }
-function tick(){
-  if(!scanning) return;
-  if(video.readyState===video.HAVE_ENOUGH_DATA){
-    canvas.width=video.videoWidth; canvas.height=video.videoHeight;
-    ctx.drawImage(video,0,0,canvas.width,canvas.height);
-    var img=ctx.getImageData(0,0,canvas.width,canvas.height);
-    var q=jsQR(img.data,img.width,img.height,{inversionAttempts:"dontInvert"});
-    if(q&&q.data&&!sibuk){
-      stopKamera(); cek(q.data);
-      setTimeout(function(){if(!sibuk)mulaiKamera()},2600);
-      return;
-    }
-  }
-  requestAnimationFrame(tick);
+
+function toggleTorch(){
+  if(!qrScanner) return;
+  torchOn = !torchOn;
+  (torchOn ? qrScanner.turnFlashOn() : qrScanner.turnFlashOff()).then(function(){
+    document.getElementById("btnTorch").textContent = torchOn ? "Matikan Senter" : "Senter 🔦";
+  }).catch(function(){});
 }
 
 document.addEventListener('DOMContentLoaded',function(){
   document.getElementById('btnCam').addEventListener('click',mulaiKamera);
   document.getElementById('btnStop').addEventListener('click',stopKamera);
+  document.getElementById('btnTorch').addEventListener('click',toggleTorch);
   if(KEY){
     document.getElementById('needKey').style.display='none';
     document.getElementById('scanArea').style.display='block';
