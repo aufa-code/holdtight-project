@@ -10,7 +10,8 @@
 <style>
 :root{--bg:#0d0d0d;--bone:#E8E4DC;--dim:rgba(232,228,220,.6);--faint:rgba(232,228,220,.35);--line:rgba(232,228,220,.14);--green:#2e9e6b;--red:#c1121f}
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:var(--bg);color:var(--bone);font-family:"Space Mono",monospace;font-size:14px;line-height:1.7;padding:28px 20px}
+html,body{height:100%}
+body{background:var(--bg);color:var(--bone);font-family:"Space Mono",monospace;font-size:14px;line-height:1.7;padding:28px 20px;overflow-x:hidden}
 .wrap{max-width:460px;margin:0 auto}
 h1{font-family:"Anton",sans-serif;font-weight:400;text-transform:uppercase;letter-spacing:.02em;line-height:.95}
 .lbl{font-size:10px;letter-spacing:.32em;text-transform:uppercase;color:var(--faint)}
@@ -19,6 +20,18 @@ h1{font-family:"Anton",sans-serif;font-weight:400;text-transform:uppercase;lette
 .btn.green{background:var(--green);border-color:var(--green);color:#fff}
 .btn.ghost{background:transparent;color:var(--bone)}
 input{background:transparent;border:1px solid var(--line);color:var(--bone);font-family:inherit;font-size:16px;padding:12px}
+
+/* --- fullscreen scanner ala BCA --- */
+#scannerOverlay{position:fixed;inset:0;background:#000;z-index:9999;display:none}
+#scannerOverlay video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000}
+.scanTopBtn{position:absolute;top:calc(env(safe-area-inset-top,0px) + 14px);width:40px;height:40px;border-radius:50%;background:rgba(0,0,0,.45);border:1px solid rgba(232,228,220,.3);color:var(--bone);display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer}
+#btnClose{left:14px}
+#btnTorch{right:14px}
+#btnTorch.on{background:var(--green);border-color:var(--green)}
+#scanHintTop{position:absolute;top:calc(env(safe-area-inset-top,0px) + 62px);left:0;right:0;text-align:center;color:var(--bone);font-size:10px;letter-spacing:.28em;text-transform:uppercase;opacity:.85;text-shadow:0 1px 4px rgba(0,0,0,.8)}
+#sheet{position:absolute;left:0;right:0;bottom:0;background:var(--bg);border-top-left-radius:18px;border-top-right-radius:18px;padding:18px 20px calc(18px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--line)}
+#sheet .grip{width:36px;height:4px;border-radius:2px;background:var(--line);margin:0 auto 14px}
+#hasilLive{margin-top:14px}
 </style>
 </head>
 <body>
@@ -35,15 +48,11 @@ input{background:transparent;border:1px solid var(--line);color:var(--bone);font
   </div>
 
   <div id="scanArea" style="display:none">
-    <div class="card" style="text-align:center;padding:14px;position:relative">
-      <video id="video" playsinline autoplay muted style="width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:4px;background:#000;display:none"></video>
+    <div class="card" style="text-align:center">
       <button id="btnCam" class="btn green">Buka Kamera — Live Scan</button>
-      <button id="btnStop" class="btn ghost" style="margin-top:8px;display:none">Tutup Kamera</button>
-      <button id="btnTorch" class="btn ghost" style="margin-top:8px;display:none">Senter 🔦</button>
-      <p class="lbl" style="margin-top:12px" id="camHint">arahkan kamera ke qr, kedeteksi otomatis — 1 qr untuk 1 orang</p>
+      <p class="lbl" style="margin-top:12px">kamera kebuka fullscreen, arahkan ke qr — otomatis kedetek</p>
     </div>
-    <div class="card">
-      <label class="lbl">atau ketik kode manual</label>
+    <div class="card"><label class="lbl">atau ketik kode manual</label>
       <div style="display:flex;gap:8px;margin-top:10px">
         <input id="manual" placeholder="HT4-7F3A" style="flex:1">
         <button class="btn" style="width:auto" onclick="cek(document.getElementById('manual').value)">CEK</button>
@@ -51,6 +60,23 @@ input{background:transparent;border:1px solid var(--line);color:var(--bone);font
     </div>
     <div id="hasil" style="margin-top:18px"></div>
     <p class="lbl" style="margin-top:14px;text-align:center"><a href="#" style="color:var(--faint)" onclick="gantiKey();return false">ganti kunci</a></p>
+  </div>
+</div>
+
+<!-- fullscreen scanner, ala aplikasi bank (BCA dkk) -->
+<div id="scannerOverlay">
+  <video id="video" playsinline autoplay muted></video>
+  <button id="btnClose" class="scanTopBtn" aria-label="Tutup kamera">✕</button>
+  <button id="btnTorch" class="scanTopBtn" aria-label="Senter">🔦</button>
+  <div id="scanHintTop">arahkan ke qr — otomatis kedetek</div>
+  <div id="sheet">
+    <div class="grip"></div>
+    <label class="lbl">atau ketik kode manual</label>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <input id="manualLive" placeholder="HT4-7F3A" style="flex:1">
+      <button class="btn" style="width:auto" onclick="cek(document.getElementById('manualLive').value)">CEK</button>
+    </div>
+    <div id="hasilLive"></div>
   </div>
 </div>
 
@@ -68,7 +94,13 @@ var KEY = sessionStorage.getItem('ht4key') || '';
 var sibuk=false;
 
 function e2(s){return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}
-function tampil(warna,pesan){document.getElementById("hasil").innerHTML="<div class=card style='border-color:"+warna+"'><h1 style='font-size:28px;color:"+warna+";line-height:1.4'>"+pesan+"</h1></div>"}
+
+// tampil hasil di dua tempat sekaligus (panel biasa & sheet di scanner fullscreen), yg relevan aja yg keliatan
+function tampil(warna,pesan){
+  var html = "<div class=card style='border-color:"+warna+"'><h1 style='font-size:22px;color:"+warna+";line-height:1.4;margin:0'>"+pesan+"</h1></div>";
+  var h1 = document.getElementById("hasil"); if(h1) h1.innerHTML = html;
+  var h2 = document.getElementById("hasilLive"); if(h2) h2.innerHTML = html;
+}
 
 function simpanKey(){
   var v = document.getElementById('keyIn').value.trim();
@@ -79,7 +111,7 @@ function simpanKey(){
 }
 function gantiKey(){
   sessionStorage.removeItem('ht4key'); KEY='';
-  stopKamera();
+  tutupKamera();
   document.getElementById('scanArea').style.display='none';
   document.getElementById('needKey').style.display='block';
 }
@@ -98,15 +130,14 @@ function cek(code){
   }).catch(function(){tampil("var(--red)","KONEKSI GAGAL — coba lagi");sibuk=false});
 }
 
-// catatan: versi qr-scanner ini udah auto-import worker-nya sendiri, gak perlu di-set manual lagi
 var video, qrScanner=null, lastResult='', torchOn=false;
 
-function mulaiKamera(){
+function bukaKamera(){
   video=document.getElementById("video");
   if(typeof QrScanner==="undefined"){tampil("var(--red)","LIBRARY QR BELUM TERMUAT — cek internet, lalu refresh");return}
 
-  var btn=document.getElementById("btnCam");
-  btn.disabled=true; btn.textContent="MEMINTA IZIN KAMERA…";
+  document.getElementById("scannerOverlay").style.display="block";
+  document.body.style.overflow="hidden";
 
   qrScanner = new QrScanner(video, function(result){
     var text = (result && result.data) || result;
@@ -115,7 +146,6 @@ function mulaiKamera(){
     cek(text);
     setTimeout(function(){ lastResult=''; }, 2600); // biar QR yg sama gak double-trigger pas masih ke-hold
   }, {
-    // overlay bawaan qr-scanner: otomatis nempel pas di ukuran video asli (gak kayak overlay manual yg gampang salah ukuran)
     highlightScanRegion: true,
     highlightCodeOutline: true,
     maxScansPerSecond: 10,
@@ -124,42 +154,37 @@ function mulaiKamera(){
   });
 
   qrScanner.start().then(function(){
-    video.style.display="block";
-    btn.style.display="none"; btn.disabled=false; btn.textContent="Buka Kamera — Live Scan";
-    document.getElementById("btnStop").style.display="block";
-    document.getElementById("camHint").textContent="live — arahkan ke qr, otomatis kedetek";
-
     qrScanner.hasFlash().then(function(has){
-      if(has) document.getElementById("btnTorch").style.display="block";
-    }).catch(function(){});
+      document.getElementById("btnTorch").style.display = has ? "flex" : "none";
+    }).catch(function(){ document.getElementById("btnTorch").style.display="none"; });
   }).catch(function(err){
-    btn.disabled=false; btn.textContent="Buka Kamera — Live Scan";
+    tutupKamera();
     tampil("var(--red)","GAGAL BUKA KAMERA ✕<br><small>"+e2(err&&err.message||err)+"</small>");
   });
 }
 
-function stopKamera(){
+function tutupKamera(){
   if(qrScanner){ qrScanner.stop(); qrScanner.destroy(); qrScanner=null; }
   torchOn=false;
-  if(video) video.style.display="none";
-  var bc=document.getElementById("btnCam"), bs=document.getElementById("btnStop"), bt=document.getElementById("btnTorch");
-  if(bc) bc.style.display="block";
-  if(bs) bs.style.display="none";
-  if(bt){ bt.style.display="none"; bt.textContent="Senter 🔦"; }
-  var ch=document.getElementById("camHint"); if(ch) ch.textContent="arahkan kamera ke qr, kedeteksi otomatis — 1 qr untuk 1 orang";
+  var bt=document.getElementById("btnTorch");
+  if(bt){ bt.classList.remove("on"); bt.textContent="🔦"; }
+  document.getElementById("scannerOverlay").style.display="none";
+  document.body.style.overflow="";
 }
 
 function toggleTorch(){
   if(!qrScanner) return;
   torchOn = !torchOn;
   (torchOn ? qrScanner.turnFlashOn() : qrScanner.turnFlashOff()).then(function(){
-    document.getElementById("btnTorch").textContent = torchOn ? "Matikan Senter" : "Senter 🔦";
+    var bt=document.getElementById("btnTorch");
+    bt.classList.toggle("on", torchOn);
+    bt.textContent = torchOn ? "⚡" : "🔦";
   }).catch(function(){});
 }
 
 document.addEventListener('DOMContentLoaded',function(){
-  document.getElementById('btnCam').addEventListener('click',mulaiKamera);
-  document.getElementById('btnStop').addEventListener('click',stopKamera);
+  document.getElementById('btnCam').addEventListener('click',bukaKamera);
+  document.getElementById('btnClose').addEventListener('click',tutupKamera);
   document.getElementById('btnTorch').addEventListener('click',toggleTorch);
   if(KEY){
     document.getElementById('needKey').style.display='none';
