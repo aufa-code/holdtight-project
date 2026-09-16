@@ -37,9 +37,6 @@ input{background:transparent;border:1px solid var(--line);color:var(--bone);font
   <div id="scanArea" style="display:none">
     <div class="card" style="text-align:center;padding:14px;position:relative">
       <video id="video" playsinline autoplay muted style="width:100%;border-radius:4px;background:#000;display:none"></video>
-      <div id="scanFrame" style="position:absolute;left:14px;right:14px;top:14px;bottom:96px;display:none;align-items:center;justify-content:center;pointer-events:none">
-        <div style="width:62%;aspect-ratio:1/1;border:3px solid var(--green);border-radius:14px;box-shadow:0 0 0 999px rgba(0,0,0,.45)"></div>
-      </div>
       <button id="btnCam" class="btn green">Buka Kamera — Live Scan</button>
       <button id="btnStop" class="btn ghost" style="margin-top:8px;display:none">Tutup Kamera</button>
       <button id="btnTorch" class="btn ghost" style="margin-top:8px;display:none">Senter 🔦</button>
@@ -118,10 +115,9 @@ function mulaiKamera(){
     cek(text);
     setTimeout(function(){ lastResult=''; }, 2600); // biar QR yg sama gak double-trigger pas masih ke-hold
   }, {
-    // hanya scan area kotak tengah (sama kayak frame ijo di layar) — jauh lebih cepat & akurat
-    // daripada scan seluruh frame kamera penuh
-    highlightScanRegion: false,
-    highlightCodeOutline: false,
+    // overlay bawaan qr-scanner: otomatis nempel pas di ukuran video asli (gak kayak overlay manual yg gampang salah ukuran)
+    highlightScanRegion: true,
+    highlightCodeOutline: true,
     maxScansPerSecond: 10,
     preferredCamera: 'environment',
     returnDetailedScanResult: true
@@ -129,7 +125,6 @@ function mulaiKamera(){
 
   qrScanner.start().then(function(){
     video.style.display="block";
-    document.getElementById("scanFrame").style.display="flex";
     btn.style.display="none"; btn.disabled=false; btn.textContent="Buka Kamera — Live Scan";
     document.getElementById("btnStop").style.display="block";
     document.getElementById("camHint").textContent="live — arahkan ke qr, otomatis kedetek";
@@ -151,7 +146,6 @@ function stopKamera(){
   if(bc) bc.style.display="block";
   if(bs) bs.style.display="none";
   if(bt){ bt.style.display="none"; bt.textContent="Senter 🔦"; }
-  var sf=document.getElementById("scanFrame"); if(sf) sf.style.display="none";
   var ch=document.getElementById("camHint"); if(ch) ch.textContent="arahkan kamera ke qr, kedeteksi otomatis — 1 qr untuk 1 orang";
 }
 
